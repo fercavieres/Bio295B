@@ -1,0 +1,88 @@
+# 01. Mapped Reads
+
+Con los reads ya trimmeados se realiza el mapeo contra el genoma de referencia de *S. chilensis* (SterChil1, ensamblado de novo, versión enmascarada).
+
+**Referencia:**
+```
+/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked
+```
+
+**Output:** BAMs por corrida de secuenciación en:
+```
+/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final/
+```
+
+**Herramienta:** `bwa-mem2 mem` (conda env: `preSNPcalling`), 8 threads, `-q 30 -f 0x2`
+
+> Algunas muestras fueron secuenciadas en múltiples corridas (pool2 y pool3), por lo que generan BAMs separados por corrida (`_high1`, `_high2`, `_low`, etc.) que se fusionan en el paso siguiente.
+
+---
+
+## *S. parasiticus*
+
+Script: `01a.mapeo_sparasiticus.sh`
+
+| Grupo | Muestras | Corridas |
+|---|---|---|
+| Pool1 | SPA1, SPA9 | 1 (simple) |
+| Mikkelsen | SRR22267306, SRR10019934, SRR10019945, SRR9946748 | 1 (simple) |
+| Pool2 | JJW5680, JJW4274, JJW4273, JJW730, T2-15, T7-11, HK_2019, UAMX5074, UAMX602, UAMX623, ZR_2019 | 3 (high1, high2, low) |
+| Pool3 | AM_2019 | 3 (high1, high2, low) |
+| Pool3 | AX_2016, JX_2019, T1-15, T14-19, T3-10, T4-10, TB1-15, TB1-16, TB2-16, TB3-11, TB4-11, TB6-11, TS17-16 | 2 (high, low) |
+
+> ⚠️ AM_2019 low falló en el script principal porque el archivo en lowcoverage usa nomenclatura `_R1/_R2.fastq.gz` en vez de `_1/_2.fq.gz`. Se remapeó con script separado.
+
+Script de corrección: `01b.mapeo_AM2019_low.sh`
+
+```bash
+#!/bin/bash
+export TZ="America/Santiago"
+source activate preSNPcalling
+
+ref="/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked"
+bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
+low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
+
+SM="AM_2019"
+bwa-mem2 mem -t 8 -M \
+    -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+    "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
+samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam"
+```
+
+---
+
+## *S. longicaudus*
+
+Script: `01c.mapeo_slongicaudus.sh`
+
+| Grupo | Muestras | Corridas |
+|---|---|---|
+| Pool1 | SL5, SL8 | 1 (simple) |
+| Mikkelsen | SRR22267307 | 1 (simple) |
+| Pool2 | UAMX160, UAMX161, JJW1966, JJW1467, JJW5548, TH-19, OJ-19, F1-21, F2-21, F3-21, F4-21, F5-21, F6-21 | 3 (high1, high2, low) |
+| Pool3 | KT-19, OK-19 | 2 (high, low) |
+
+---
+
+## *S. pomarinus*
+
+Script: `01d.mapeo_spomarinus.sh`
+
+| Grupo | Muestras | Corridas |
+|---|---|---|
+| Pool1 | SPO4, SPO7 | 1 (simple) |
+| Mikkelsen | SRR22267299, SRR22267300, SRR22267301 | 1 (simple) |
+| Pool2 | ABJ189, JJW2216, UAMX383 | 3 (high1, high2, low) |
+| Pool3 | UAMX8584 | 2 (high, low) |
+
+---
+
+## *S. skua*
+
+Script: `01e.mapeo_sskua.sh`
+
+| Grupo | Muestras | Corridas |
+|---|---|---|
+| Mikkelsen | SRR22267302, SRR22267303 | 1 (simple) |
+| Pool3 | S1_2019, S3_2019, S4_2019, S5_2019, S6_2019, S7_2019 | 2 (high, low) |
