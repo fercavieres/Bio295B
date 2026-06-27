@@ -2,37 +2,123 @@
 
 Con los reads ya trimmeados se realiza el mapeo contra el genoma de referencia de *S. chilensis* (SterChil1, ensamblado de novo, versión enmascarada).
 
-**Referencia:**
-```
-/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked
-```
+- **Referencia:** `/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked`
+- **Output:** `/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final/`
+- **Herramienta:** `bwa-mem2 mem` (conda env: `preSNPcalling`), 8 threads, flags `-q 30 -f 0x2`
 
-**Output:** BAMs por corrida de secuenciación en:
-```
-/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final/
-```
-
-**Herramienta:** `bwa-mem2 mem` (conda env: `preSNPcalling`), 8 threads, `-q 30 -f 0x2`
-
-> Algunas muestras fueron secuenciadas en múltiples corridas (pool2 y pool3), por lo que generan BAMs separados por corrida (`_high1`, `_high2`, `_low`, etc.) que se fusionan en el paso siguiente.
+Algunas muestras fueron secuenciadas en múltiples corridas (pool2 y pool3), generando BAMs separados por corrida (`_high1`, `_high2`, `_low`, etc.) que se fusionan en el paso siguiente.
 
 ---
 
-## *S. parasiticus*
+## *S. parasiticus* — `01a.mapeo_sparasiticus.sh`
 
-Script: `01a.mapeo_sparasiticus.sh`
+```bash
+#!/bin/bash
+export TZ="America/Santiago"
+source activate preSNPcalling
 
-| Grupo | Muestras | Corridas |
-|---|---|---|
-| Pool1 | SPA1, SPA9 | 1 (simple) |
-| Mikkelsen | SRR22267306, SRR10019934, SRR10019945, SRR9946748 | 1 (simple) |
-| Pool2 | JJW5680, JJW4274, JJW4273, JJW730, T2-15, T7-11, HK_2019, UAMX5074, UAMX602, UAMX623, ZR_2019 | 3 (high1, high2, low) |
-| Pool3 | AM_2019 | 3 (high1, high2, low) |
-| Pool3 | AX_2016, JX_2019, T1-15, T14-19, T3-10, T4-10, TB1-15, TB1-16, TB2-16, TB3-11, TB4-11, TB6-11, TS17-16 | 2 (high, low) |
+ref="/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked"
+bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
+mik="/data2/lab2/lucila/data_set_final/genomas_mikkelsen"
+pool1="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool1"
+high2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_highcoverage"
+low2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_lowcoverage"
+high3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_highcoverage"
+low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
 
-> ⚠️ AM_2019 low falló en el script principal porque el archivo en lowcoverage usa nomenclatura `_R1/_R2.fastq.gz` en vez de `_1/_2.fq.gz`. Se remapeó con script separado.
+echo "[$(date '+%H:%M:%S')] Iniciando mapeo S. parasiticus"
 
-Script de corrección: `01b.mapeo_AM2019_low.sh`
+# Pool1 simples
+for SM in SPA1 SPA9; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$pool1/${SM}_1.fq.gz" "$pool1/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# SRR simples
+for SM in SRR22267306 SRR10019934 SRR10019945 SRR9946748; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$mik/${SM}_1.fq.gz" "$mik/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# Pool2 - 3 corridas
+for SM in JJW5680 JJW4274 JJW4273 JJW730 T2-15 T7-11 HK_2019 UAMX5074 UAMX602 UAMX623 ZR_2019; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high1: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high1\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_1.fq.gz" "$high2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high1.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high1: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high1: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando high2: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high2\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_R1.fastq.gz" "$high2/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high2.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high2: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high2: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$low2/${SM}_1.fq.gz" "$low2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+# Pool3 - AM_2019 tiene 3 corridas
+for SM in AM_2019; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high1: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high1\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$high3/${SM}_1.fq.gz" "$high3/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high1.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high1: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high1: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando high2: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high2\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$high3/${SM}_R1.fastq.gz" "$high3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high2.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high2: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high2: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$low3/${SM}_1.fq.gz" "$low3/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+# Pool3 - 2 corridas
+for SM in AX_2016 JX_2019 T1-15 T14-19 T3-10 T4-10 TB1-15 TB1-16 TB2-16 TB3-11 TB4-11 TB6-11 TS17-16; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$high3/${SM}_R1.fastq.gz" "$high3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
+        "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+echo "============================================"
+echo "Mapeo S. parasiticus terminado"
+echo "============================================"
+```
+
+> ⚠️ AM_2019 low falló en el script principal porque el archivo en lowcoverage usa nomenclatura `_R1/_R2.fastq.gz` en vez de `_1/_2.fq.gz`. Se remapeó con script separado `01b.mapeo_AM2019_low.sh`:
 
 ```bash
 #!/bin/bash
@@ -44,45 +130,232 @@ bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
 low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
 
 SM="AM_2019"
+echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
 bwa-mem2 mem -t 8 -M \
     -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_parasiticus\tSM:${SM}" \
     "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
-samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam"
+samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+echo "[$(date '+%H:%M:%S')] OK: $SM" || \
+echo "[$(date '+%H:%M:%S')] ERROR: $SM"
 ```
 
 ---
 
-## *S. longicaudus*
+## *S. longicaudus* — `01c.mapeo_slongicaudus.sh`
 
-Script: `01c.mapeo_slongicaudus.sh`
+```bash
+#!/bin/bash
+export TZ="America/Santiago"
+source activate preSNPcalling
 
-| Grupo | Muestras | Corridas |
-|---|---|---|
-| Pool1 | SL5, SL8 | 1 (simple) |
-| Mikkelsen | SRR22267307 | 1 (simple) |
-| Pool2 | UAMX160, UAMX161, JJW1966, JJW1467, JJW5548, TH-19, OJ-19, F1-21, F2-21, F3-21, F4-21, F5-21, F6-21 | 3 (high1, high2, low) |
-| Pool3 | KT-19, OK-19 | 2 (high, low) |
+ref="/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked"
+bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
+mik="/data2/lab2/lucila/data_set_final/genomas_mikkelsen"
+pool1="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool1"
+high2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_highcoverage"
+low2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_lowcoverage"
+high3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_highcoverage"
+low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
+
+echo "[$(date '+%H:%M:%S')] Iniciando mapeo S. longicaudus"
+
+# Pool1 simples
+for SM in SL5 SL8; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$pool1/${SM}_1.fq.gz" "$pool1/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# SRR simple
+for SM in SRR22267307; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$mik/${SM}_1.fq.gz" "$mik/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# Pool2 - 3 corridas
+for SM in UAMX160 UAMX161 JJW1966 JJW1467 JJW5548 TH-19 OJ-19 F1-21 F2-21 F3-21 F4-21 F5-21 F6-21; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high1: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high1\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_1.fq.gz" "$high2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high1.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high1: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high1: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando high2: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high2\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_R1.fastq.gz" "$high2/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high2.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high2: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high2: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$low2/${SM}_1.fq.gz" "$low2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+# Pool3 - 2 corridas
+for SM in KT-19 OK-19; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$high3/${SM}_R1.fastq.gz" "$high3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_longicaudus\tSM:${SM}" \
+        "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+echo "============================================"
+echo "Mapeo S. longicaudus terminado"
+echo "============================================"
+```
 
 ---
 
-## *S. pomarinus*
+## *S. pomarinus* — `01d.mapeo_spomarinus.sh`
 
-Script: `01d.mapeo_spomarinus.sh`
+```bash
+#!/bin/bash
+export TZ="America/Santiago"
+source activate preSNPcalling
 
-| Grupo | Muestras | Corridas |
-|---|---|---|
-| Pool1 | SPO4, SPO7 | 1 (simple) |
-| Mikkelsen | SRR22267299, SRR22267300, SRR22267301 | 1 (simple) |
-| Pool2 | ABJ189, JJW2216, UAMX383 | 3 (high1, high2, low) |
-| Pool3 | UAMX8584 | 2 (high, low) |
+ref="/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked"
+bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
+mik="/data2/lab2/lucila/data_set_final/genomas_mikkelsen"
+pool1="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool1"
+high2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_highcoverage"
+low2="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool2/bam_lowcoverage"
+high3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_highcoverage"
+low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
+
+echo "[$(date '+%H:%M:%S')] Iniciando mapeo S. pomarinus"
+
+# Pool1 simples
+for SM in SPO4 SPO7; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$pool1/${SM}_1.fq.gz" "$pool1/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# SRR simples
+for SM in SRR22267299 SRR22267300 SRR22267301; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$mik/${SM}_1.fq.gz" "$mik/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# Pool2 - 3 corridas
+for SM in ABJ189 JJW2216 UAMX383; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high1: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high1\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_1.fq.gz" "$high2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high1.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high1: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high1: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando high2: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high2\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$high2/${SM}_R1.fastq.gz" "$high2/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high2.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high2: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high2: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$low2/${SM}_1.fq.gz" "$low2/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+# Pool3 - 2 corridas
+for SM in UAMX8584; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$high3/${SM}_R1.fastq.gz" "$high3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_pomarinus\tSM:${SM}" \
+        "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+echo "============================================"
+echo "Mapeo S. pomarinus terminado"
+echo "============================================"
+```
 
 ---
 
-## *S. skua*
+## *S. skua* — `01e.mapeo_sskua.sh`
 
-Script: `01e.mapeo_sskua.sh`
+```bash
+#!/bin/bash
+export TZ="America/Santiago"
+source activate preSNPcalling
 
-| Grupo | Muestras | Corridas |
-|---|---|---|
-| Mikkelsen | SRR22267302, SRR22267303 | 1 (simple) |
-| Pool3 | S1_2019, S3_2019, S4_2019, S5_2019, S6_2019, S7_2019 | 2 (high, low) |
+ref="/data2/lab2/lucila/01.anotacion/SterChil1.hic.hap1.yahs_scaffolds_final.fa.MicroFinder.ordered.fa.masked"
+bam="/data2/lab2/lucila/BIO295B_FernandaCavieres/data/bam_completo_norte_final"
+mik="/data2/lab2/lucila/data_set_final/genomas_mikkelsen"
+high3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_highcoverage"
+low3="/data2/lab2/lucila/data_set_final/genomas_norte/bam_pool3/bam_lowcoverage"
+
+echo "[$(date '+%H:%M:%S')] Iniciando mapeo S. skua"
+
+# SRR simples
+for SM in SRR22267302 SRR22267303; do
+    echo "[$(date '+%H:%M:%S')] Mapeando: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}\tLB:${SM}\tPL:ILLUMINA\tPU:skua_skua\tSM:${SM}" \
+        "$ref" "$mik/${SM}_1.fq.gz" "$mik/${SM}_2.fq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK: $SM" || echo "[$(date '+%H:%M:%S')] ERROR: $SM"
+done
+
+# S_2019 con high+low
+for SM in S1_2019 S3_2019 S4_2019 S5_2019 S6_2019 S7_2019; do
+    echo "[$(date '+%H:%M:%S')] Mapeando high: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_high\tLB:${SM}\tPL:ILLUMINA\tPU:skua_skua\tSM:${SM}" \
+        "$ref" "$high3/${SM}_R1.fastq.gz" "$high3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_high.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK high: $SM" || echo "[$(date '+%H:%M:%S')] ERROR high: $SM"
+
+    echo "[$(date '+%H:%M:%S')] Mapeando low: $SM"
+    bwa-mem2 mem -t 8 -M \
+        -R "@RG\tID:${SM}_low\tLB:${SM}\tPL:ILLUMINA\tPU:skua_skua\tSM:${SM}" \
+        "$ref" "$low3/${SM}_R1.fastq.gz" "$low3/${SM}_R2.fastq.gz" | \
+    samtools view -bh -@ 8 -q 30 -f 0x2 > "$bam/${SM}_low.bam" && \
+    echo "[$(date '+%H:%M:%S')] OK low: $SM" || echo "[$(date '+%H:%M:%S')] ERROR low: $SM"
+done
+
+echo "============================================"
+echo "Mapeo S. skua terminado"
+echo "============================================"
+```
